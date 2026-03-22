@@ -1,0 +1,27 @@
+# ── Web framework ──────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# ── HTTP client (HuggingFace inference calls) ──────────────────
+httpx==0.27.0
+
+# ── Data validation ────────────────────────────────────────────
+pydantic==2.7.4
+
+# ── Vector DB client ───────────────────────────────────────────
+qdrant-client==1.9.1
+
+# ── Full-text / BM25 ───────────────────────────────────────────
+elasticsearch[async]==8.13.0
+
+# ── Graph DB ───────────────────────────────────────────────────
+neo4j==5.20.0
+
+# ── Metadata store ─────────────────────────────────────────────
+asyncpg==0.29.0
+
+# ── HuggingFace retry logic ────────────────────────────────────
+tenacity==8.3.0
+
+# ── Environment ────────────────────────────────────────────────
+python-dotenv==1.0.1

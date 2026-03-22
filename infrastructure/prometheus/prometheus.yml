@@ -1,0 +1,54 @@
+# ============================================================
+# Prometheus scrape configuration
+# Replaces: Amazon CloudWatch metrics
+# Grafana connects to this at http://prometheus:9090
+# ============================================================
+
+global:
+  scrape_interval:     15s   # how often to scrape each target
+  evaluation_interval: 15s   # how often to evaluate alerting rules
+
+scrape_configs:
+
+  # ── RAG application services ─────────────────────────────────
+  # Each FastAPI service exposes GET /metrics via prometheus-client
+
+  - job_name: 'rag_orchestrator'
+    static_configs:
+      - targets: ['orchestrator:8000']
+    metrics_path: /metrics
+
+  - job_name: 'rag_retrieval'
+    static_configs:
+      - targets: ['retrieval:8002']
+    metrics_path: /metrics
+
+  - job_name: 'rag_compression'
+    static_configs:
+      - targets: ['compression:8003']
+    metrics_path: /metrics
+
+  - job_name: 'rag_ingestion'
+    static_configs:
+      - targets: ['ingestion:8001']
+    metrics_path: /metrics
+
+  # ── Infrastructure services ───────────────────────────────────
+
+  # Qdrant exposes native Prometheus metrics at /metrics on port 6333
+  - job_name: 'qdrant'
+    static_configs:
+      - targets: ['qdrant:6333']
+    metrics_path: /metrics
+
+  # Prometheus scrapes itself — useful for meta-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # NOTE: PostgreSQL and Redis do not expose HTTP metrics endpoints
+  # natively. To scrape them you would add:
+  #   - postgres-exporter (https://github.com/prometheus-community/postgres_exporter)
+  #   - redis-exporter    (https://github.com/oliver006/redis_exporter)
+  # For this prototype, monitor them via their Docker health checks and
+  # the Grafana dashboards built into each image's official stack.

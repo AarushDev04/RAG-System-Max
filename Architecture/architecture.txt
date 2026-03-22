@@ -1,0 +1,40 @@
+code .
+```
+
+**3.4** Your file tree in VS Code should look exactly like this:
+```
+rag-prototype/
+├── docker-compose.yml
+├── .env.example
+├── README.md
+├── scripts/
+│   └── bootstrap.sh
+├── services/
+│   ├── orchestrator/
+│   │   ├── Dockerfile
+│   │   ├── main.py
+│   │   ├── pipeline.py
+│   │   ├── cache.py
+│   │   ├── hf_client.py
+│   │   └── requirements.txt
+│   ├── retrieval/
+│   │   ├── Dockerfile
+│   │   ├── main.py
+│   │   ├── retrievers.py
+│   │   └── requirements.txt
+│   ├── compression/
+│   │   ├── Dockerfile
+│   │   ├── main.py
+│   │   └── requirements.txt
+│   └── ingestion/
+│       ├── Dockerfile
+│       ├── main.py
+│       ├── pipeline.py
+│       └── requirements.txt
+├── infrastructure/
+│   ├── postgres/
+│   │   └── init.sql
+│   └── prometheus/
+│       └── prometheus.yml
+└── tests/
+    └── test_e2e.py

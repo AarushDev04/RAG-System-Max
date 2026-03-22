@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0b0d;
+    --bg2:       #0f1114;
+    --bg3:       #151820;
+    --bg4:       #1c2028;
+    --border:    #252932;
+    --border2:   #2e3440;
+    --text:      #c8cdd8;
+    --text2:     #7a8299;
+    --text3:     #454d60;
+    --accent:    #4fd1c5;
+    --accent2:   #2d9b91;
+    --amber:     #f6ad55;
+    --green:     #68d391;
+    --red:       #fc8181;
+    --blue:      #63b3ed;
+    --purple:    #b794f4;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+    --radius:    6px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow: hidden;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: 240px 1fr 280px;
+    grid-template-rows: 48px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-mark {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+
+  .logo-mark span {
+    background: var(--accent);
+    border-radius: 1px;
+    opacity: 0.9;
+  }
+
+  .logo-mark span:nth-child(2) { opacity: 0.5; }
+  .logo-mark span:nth-child(3) { opacity: 0.7; }
+  .logo-mark span:nth-child(4) { opacity: 0.3; }
+
+  .logo-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.08em;
+  }
+
+  .logo-text em {
+    color: var(--accent);
+    font-style: normal;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text2);
+    letter-spacing: 0.05em;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text3);
+    transition: background 0.4s;
+  }
+
+  .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.loading { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+  .status-dot.error { background: var(--red); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .header-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--text3);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* Ingest panel */
+  .ingest-zone {
+    border: 1px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+
+  .ingest-zone:hover { border-color: var(--accent2); background: rgba(79,209,197,0.03); }
+  .ingest-zone.drag-over { border-color: var(--accent); background: rgba(79,209,197,0.06); }
+
+  .ingest-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+  }
+
+  .ingest-icon {
+    font-size: 18px;
+    margin-bottom: 4px;
+    color: var(--text3);
+  }
+
+  .ingest-hint {
+    font-size: 11px;
+    color: var(--text2);
+    line-height: 1.4;
+  }
+
+  .ingest-hint strong {
+    display: block;
+    color: var(--text);
+    font-weight: 400;
+    margin-bottom: 2px;
+  }
+
+  /* Ingest queue */
+  .ingest-queue {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  .ingest-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--bg3);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+
+  .ingest-item-name {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ingest-item-status {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 3px;
+  }
+
+  .ingest-item-status.queued  { color: var(--amber); background: rgba(246,173,85,0.1); }
+  .ingest-item-status.done    { color: var(--green); background: rgba(104,211,145,0.1); }
+  .ingest-item-status.error   { color: var(--red);   background: rgba(252,129,129,0.1); }
+
+  /* Session history list */
+  .session-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .session-item {
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+  }
+
+  .session-item:hover { background: var(--bg3); border-color: var(--border); }
+  .session-item.active { background: var(--bg4); border-color: var(--border2); }
+
+  .session-item-id {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    margin-bottom: 2px;
+  }
+
+  .session-item-preview {
+    font-size: 11px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .new-session-btn {
+    margin: 8px;
+    padding: 8px;
+    background: transparent;
+    border: 1px dashed var(--border2);
+    border-radius: var(--radius);
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .new-session-btn:hover {
+    border-color: var(--accent2);
+    color: var(--accent);
+    background: rgba(79,209,197,0.04);
+  }
+
+  /* ── Chat area ────────────────────────────────────────────── */
+  .chat-area {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    scroll-behavior: smooth;
+  }
+
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text3);
+    animation: fadeIn 0.6s ease;
+  }
+
+  .empty-state-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .empty-hint {
+    padding: 12px 14px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    line-height: 1.4;
+  }
+
+  .empty-hint:hover {
+    border-color: var(--accent2);
+    color: var(--text);
+    background: var(--bg3);
+  }
+
+  .empty-hint strong {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+
+  .empty-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text2);
+    letter-spacing: 0.06em;
+  }
+
+  /* Message bubbles */
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: slideUp 0.25s ease;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .msg-role {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .msg-role.user { color: var(--blue); }
+  .msg-role.assistant { color: var(--accent); }
+
+  .msg-ts {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+  }
+
+  .msg-body {
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    line-height: 1.7;
+    font-size: 13.5px;
+    max-width: 820px;
+  }
+
+  .msg.user .msg-body {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    align-self: flex-start;
+  }
+
+  .msg.assistant .msg-body {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-left: 2px solid var(--accent2);
+  }
+
+  /* Thinking / streaming indicator */
+  .thinking {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent2);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    max-width: 320px;
+  }
+
+  .thinking-dots {
+    display: flex;
+    gap: 3px;
+  }
+
+  .thinking-dots span {
+    width: 4px;
+    height: 4px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes blink {
+    0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+
+  /* ── Input area ───────────────────────────────────────────── */
+  .input-area {
+    padding: 16px 28px 20px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+
+  .input-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: border-color 0.2s;
+  }
+
+  .input-wrap:focus-within {
+    border-color: var(--accent2);
+    box-shadow: 0 0 0 2px rgba(79,209,197,0.08);
+  }
+
+  textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.6;
+    resize: none;
+    min-height: 22px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  textarea::placeholder { color: var(--text3); }
+
+  .send-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    color: #0a0b0d;
+  }
+
+  .send-btn:hover { background: var(--accent2); transform: translateY(-1px); }
+  .send-btn:active { transform: translateY(0); }
+  .send-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+  .send-btn svg { width: 14px; height: 14px; }
+
+  .input-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding: 0 2px;
+  }
+
+  .input-hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+  }
+
+  .query-type-select {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text2);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 6px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .query-type-select:focus { border-color: var(--accent2); }
+
+  /* ── Telemetry panel ──────────────────────────────────────── */
+  .telemetry-panel {
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tel-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--text3);
+    text-transform: uppercase;
+  }
+
+  .tel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tel-body::-webkit-scrollbar { width: 3px; }
+  .tel-body::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  /* Individual telemetry card */
+  .tel-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .tel-card-header {
+    padding: 8px 10px 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .tel-card-query {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+
+  .tel-card-ts {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    flex-shrink: 0;
+  }
+
+  .tel-rows {
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .tel-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tel-key {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+  }
+
+  .tel-val {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .tel-val.qt-simple_factoid  { color: var(--blue);   background: rgba(99,179,237,0.12); }
+  .tel-val.qt-multi_hop       { color: var(--purple); background: rgba(183,148,244,0.12); }
+  .tel-val.qt-structured      { color: var(--amber);  background: rgba(246,173,85,0.12); }
+  .tel-val.qt-global_analytic { color: var(--green);  background: rgba(104,211,145,0.12); }
+  .tel-val.qt-latency_sensitive { color: var(--accent); background: rgba(79,209,197,0.12); }
+
+  .tel-val.cache-exact    { color: var(--green);  background: rgba(104,211,145,0.12); }
+  .tel-val.cache-semantic { color: var(--amber);  background: rgba(246,173,85,0.12); }
+  .tel-val.cache-miss     { color: var(--text3);  background: rgba(255,255,255,0.04); }
+
+  .tel-val.latency        { color: var(--accent); background: rgba(79,209,197,0.08); }
+
+  /* Telemetry pipeline trace */
+  .tel-trace {
+    padding: 6px 10px 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tel-trace-step {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    padding: 2px 5px;
+    background: var(--bg4);
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  .tel-trace-step.highlight { color: var(--accent); border-color: var(--accent2); }
+
+  /* Sources breakdown */
+  .tel-sources {
+    padding: 6px 10px 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tel-sources-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    margin-bottom: 2px;
+    letter-spacing: 0.06em;
+  }
+
+  .tel-source-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tel-source-name {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text2);
+    width: 72px;
+    flex-shrink: 0;
+  }
+
+  .tel-bar-track {
+    flex: 1;
+    height: 3px;
+    background: var(--bg4);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .tel-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent2);
+    transition: width 0.5s ease;
+  }
+
+  .tel-source-count {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    width: 14px;
+    text-align: right;
+  }
+
+  /* Empty telemetry state */
+  .tel-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text3);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .tel-empty-icon {
+    font-size: 24px;
+    opacity: 0.3;
+  }
+
+  /* ── System status bar ────────────────────────────────────── */
+  .status-bar {
+    grid-column: 1 / -1;
+    display: none; /* shown via JS when health data loads */
+  }
+
+  /* ── Scrollbar global ─────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── Toast notifications ──────────────────────────────────── */
+  .toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+  }
+
+  .toast {
+    padding: 10px 14px;
+    background: var(--bg4);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    max-width: 280px;
+    animation: slideUp 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .toast.success { border-left: 2px solid var(--green); }
+  .toast.error   { border-left: 2px solid var(--red); }
+  .toast.info    { border-left: 2px solid var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <span class="logo-text">RAG<em>/</em>SYS <span style="color:var(--text3);font-weight:300">v1.0</span></span>
+    </div>
+
+    <div class="header-status">
+      <div class="status-pill">
+        <div class="status-dot" id="sys-dot"></div>
+        <span id="sys-label">checking...</span>
+      </div>
+      <div class="status-pill">
+        <div class="status-dot" id="hf-dot"></div>
+        <span id="hf-label">HF API</span>
+      </div>
+      <div class="header-meta" id="session-label">session —</div>
+    </div>
+  </header>
+
+  <!-- ── Left sidebar ───────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Ingest documents</div>
+      <div class="ingest-zone" id="ingest-zone">
+        <input type="file" id="file-input" accept=".txt,.md,.pdf,.csv" multiple>
+        <div class="ingest-icon">⊕</div>
+        <div class="ingest-hint">
+          <strong>Drop files here</strong>
+          .txt · .md · .pdf · .csv
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="queue-section" style="display:none">
+      <div class="sidebar-label">Queue</div>
+      <div class="ingest-queue" id="ingest-queue"></div>
+    </div>
+
+    <div class="sidebar-section" style="padding-bottom:0;border-bottom:none;flex:0 0 auto">
+      <div class="sidebar-label">Sessions</div>
+    </div>
+
+    <div class="session-list" id="session-list"></div>
+
+    <button class="new-session-btn" id="new-session-btn">+ New session</button>
+  </aside>
+
+  <!-- ── Chat area ──────────────────────────────────────────── -->
+  <main class="chat-area">
+
+    <div class="messages" id="messages">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-title">// ready — ingest a document then ask anything</div>
+        <div class="empty-state-grid">
+          <div class="empty-hint" onclick="usePrompt(this)">
+            <strong>simple_factoid</strong>
+            What is the main conclusion of this document?
+          </div>
+          <div class="empty-hint" onclick="usePrompt(this)">
+            <strong>multi_hop</strong>
+            How do the concepts in section A connect to section B?
+          </div>
+          <div class="empty-hint" onclick="usePrompt(this)">
+            <strong>global_analytic</strong>
+            Summarise the key themes across all ingested documents.
+          </div>
+          <div class="empty-hint" onclick="usePrompt(this)">
+            <strong>latency_sensitive</strong>
+            Quick — what does this document say about X?
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-wrap">
+        <textarea
+          id="query-input"
+          placeholder="Ask anything about your ingested documents..."
+          rows="1"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
+        <button class="send-btn" id="send-btn" disabled title="Send (Enter)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 8h12M9 3l5 5-5 5"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-footer">
+        <span class="input-hint">Enter to send · Shift+Enter for new line</span>
+        <select class="query-type-select" id="query-type-select">
+          <option value="">auto-classify</option>
+          <option value="simple_factoid">simple_factoid</option>
+          <option value="multi_hop">multi_hop</option>
+          <option value="structured">structured</option>
+          <option value="global_analytic">global_analytic</option>
+          <option value="latency_sensitive">latency_sensitive</option>
+        </select>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Telemetry panel ────────────────────────────────────── -->
+  <aside class="telemetry-panel">
+    <div class="tel-header">Pipeline telemetry</div>
+    <div class="tel-body" id="tel-body">
+      <div class="tel-empty">
+        <div class="tel-empty-icon">◈</div>
+        <div>telemetry appears<br>after first query</div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ================================================================
+// Configuration
+// ================================================================
+const API = '';   // empty = same origin (served by FastAPI static files)
+                  // if running index.html directly, set to 'http://localhost:8000'
+
+// ================================================================
+// State
+// ================================================================
+let sessionId      = generateSessionId();
+let sessions       = {};          // sessionId → {messages, telemetry}
+let isLoading      = false;
+let healthInterval = null;
+
+// ================================================================
+// Init
+// ================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  initSession(sessionId);
+  checkHealth();
+  healthInterval = setInterval(checkHealth, 30_000);
+  setupInput();
+  setupFileIngest();
+  renderSessionList();
+  updateSessionLabel();
+});
+
+// ================================================================
+// Session management
+// ================================================================
+function generateSessionId() {
+  return 'sess-' + Math.random().toString(36).slice(2, 9);
+}
+
+function initSession(id) {
+  if (!sessions[id]) {
+    sessions[id] = { messages: [], telemetry: [], preview: null };
+  }
+}
+
+function switchSession(id) {
+  sessionId = id;
+  renderMessages();
+  renderTelemetry();
+  updateSessionLabel();
+  renderSessionList();
+}
+
+function newSession() {
+  sessionId = generateSessionId();
+  initSession(sessionId);
+  switchSession(sessionId);
+  showEmpty(true);
+}
+
+function updateSessionLabel() {
+  document.getElementById('session-label').textContent = 'session ' + sessionId;
+}
+
+function renderSessionList() {
+  const el = document.getElementById('session-list');
+  el.innerHTML = '';
+  Object.entries(sessions).reverse().forEach(([id, data]) => {
+    const div = document.createElement('div');
+    div.className = 'session-item' + (id === sessionId ? ' active' : '');
+    div.innerHTML = `
+      <div class="session-item-id">${id}</div>
+      <div class="session-item-preview">${data.preview || 'empty session'}</div>`;
+    div.onclick = () => switchSession(id);
+    el.appendChild(div);
+  });
+}
+
+document.getElementById('new-session-btn').onclick = newSession;
+
+// ================================================================
+// Health check
+// ================================================================
+async function checkHealth() {
+  const dot   = document.getElementById('sys-dot');
+  const label = document.getElementById('sys-label');
+  dot.className = 'status-dot loading';
+  label.textContent = 'checking...';
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
+    const d = await r.json();
+    if (d.status === 'healthy') {
+      dot.className = 'status-dot online';
+      label.textContent = 'all systems online';
+    } else {
+      dot.className = 'status-dot error';
+      const down = Object.entries(d.services)
+        .filter(([,v]) => v !== 'ok').map(([k]) => k).join(', ');
+      label.textContent = 'degraded: ' + down;
+    }
+    // Enable send if system is up
+    updateSendBtn();
+  } catch {
+    dot.className = 'status-dot error';
+    label.textContent = 'offline';
+    updateSendBtn();
+  }
+}
+
+// ================================================================
+// Input setup
+// ================================================================
+function setupInput() {
+  const ta   = document.getElementById('query-input');
+  const btn  = document.getElementById('send-btn');
+
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+    updateSendBtn();
+  });
+
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!btn.disabled) sendQuery();
+    }
+  });
+
+  btn.onclick = sendQuery;
+}
+
+function updateSendBtn() {
+  const ta  = document.getElementById('query-input');
+  const btn = document.getElementById('send-btn');
+  const dot = document.getElementById('sys-dot');
+  btn.disabled = isLoading || !ta.value.trim() || dot.className.includes('error');
+}
+
+// ================================================================
+// Send query
+// ================================================================
+async function sendQuery() {
+  const ta       = document.getElementById('query-input');
+  const qt       = document.getElementById('query-type-select').value;
+  const query    = ta.value.trim();
+  if (!query || isLoading) return;
+
+  // Clear input
+  ta.value = '';
+  ta.style.height = 'auto';
+
+  // Hide empty state
+  showEmpty(false);
+  isLoading = true;
+  updateSendBtn();
+
+  // Store user message
+  const ts = new Date();
+  sessions[sessionId].messages.push({ role: 'user', content: query, ts });
+  if (!sessions[sessionId].preview) sessions[sessionId].preview = query.slice(0, 40);
+  renderMessages();
+  renderSessionList();
+
+  // Show thinking indicator
+  const thinkId = 'think-' + Date.now();
+  appendThinking(thinkId);
+
+  try {
+    const body = { query, session_id: sessionId };
+    if (qt) body.query_type = qt;
+
+    const r = await fetch(`${API}/query`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+
+    removeThinking(thinkId);
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: r.statusText }));
+      throw new Error(err.detail || 'Request failed');
+    }
+
+    const d = await r.json();
+
+    // Store assistant message + telemetry
+    sessions[sessionId].messages.push({
+      role: 'assistant', content: d.answer, ts: new Date(),
+    });
+    sessions[sessionId].telemetry.unshift({
+      query,
+      query_type: d.query_type,
+      cache_type: d.cache_type,
+      latency_ms: d.latency_ms,
+      telemetry:  d.telemetry,
+      ts:         new Date(),
+      chunks:     d.telemetry
+        ? parseSources(d.telemetry) : {},
+    });
+
+    renderMessages();
+    renderTelemetry();
+
+    // Update HF indicator on first successful call
+    const hfDot   = document.getElementById('hf-dot');
+    const hfLabel = document.getElementById('hf-label');
+    hfDot.className = 'status-dot online';
+    hfLabel.textContent = 'HF API';
+
+  } catch (err) {
+    removeThinking(thinkId);
+    sessions[sessionId].messages.push({
+      role: 'assistant',
+      content: '⚠ ' + err.message,
+      ts: new Date(),
+      error: true,
+    });
+    renderMessages();
+    toast(err.message, 'error');
+  } finally {
+    isLoading = false;
+    updateSendBtn();
+  }
+}
+
+// ================================================================
+// Message rendering
+// ================================================================
+function showEmpty(show) {
+  const es = document.getElementById('empty-state');
+  es.style.display = show ? 'flex' : 'none';
+}
+
+function renderMessages() {
+  const container = document.getElementById('messages');
+  const data      = sessions[sessionId];
+
+  // Remove all messages except empty state
+  [...container.children].forEach(c => {
+    if (c.id !== 'empty-state') c.remove();
+  });
+
+  if (!data || data.messages.length === 0) {
+    showEmpty(true);
+    return;
+  }
+  showEmpty(false);
+
+  data.messages.forEach(msg => {
+    const div = document.createElement('div');
+    div.className = 'msg ' + msg.role;
+    div.innerHTML = `
+      <div class="msg-meta">
+        <span class="msg-role ${msg.role}">${msg.role === 'user' ? '→ you' : '← rag'}</span>
+        <span class="msg-ts">${formatTime(msg.ts)}</span>
+      </div>
+      <div class="msg-body${msg.error ? ' style="border-left-color:var(--red)"' : ''}">${escHtml(msg.content)}</div>`;
+    container.appendChild(div);
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendThinking(id) {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.id = id;
+  div.innerHTML = `
+    <div class="msg-meta">
+      <span class="msg-role assistant">← rag</span>
+      <span class="msg-ts">processing...</span>
+    </div>
+    <div class="thinking">
+      <div class="thinking-dots"><span></span><span></span><span></span></div>
+      running pipeline
+    </div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeThinking(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+// ================================================================
+// Telemetry rendering
+// ================================================================
+function parseSources(telemetry) {
+  // Extract "retrieved:N" and infer source counts from trace steps
+  const sources = {};
+  telemetry.forEach(step => {
+    const m = step.match(/^retrieved:(\d+)/);
+    if (m) sources['total'] = parseInt(m[1]);
+  });
+  return sources;
+}
+
+function renderTelemetry() {
+  const body = document.getElementById('tel-body');
+  const data = sessions[sessionId];
+
+  if (!data || data.telemetry.length === 0) {
+    body.innerHTML = `
+      <div class="tel-empty">
+        <div class="tel-empty-icon">◈</div>
+        <div>telemetry appears<br>after first query</div>
+      </div>`;
+    return;
+  }
+
+  body.innerHTML = '';
+
+  data.telemetry.forEach(tel => {
+    const card = document.createElement('div');
+    card.className = 'tel-card';
+
+    // Parse latency
+    const latMs  = tel.latency_ms ? tel.latency_ms.toFixed(0) + ' ms' : '—';
+    const qt     = tel.query_type || '—';
+    const ct     = tel.cache_type || '—';
+    const qtCls  = 'tel-val qt-' + qt;
+    const ctCls  = 'tel-val cache-' + ct;
+
+    // Build trace steps
+    const traceHtml = (tel.telemetry || []).map(step => {
+      const hl = step.startsWith('generation') || step.startsWith('compression:ratio')
+        ? ' highlight' : '';
+      return `<span class="tel-trace-step${hl}">${escHtml(step)}</span>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="tel-card-header">
+        <span class="tel-card-query" title="${escHtml(tel.query)}">${escHtml(tel.query)}</span>
+        <span class="tel-card-ts">${formatTime(tel.ts)}</span>
+      </div>
+      <div class="tel-rows">
+        <div class="tel-row">
+          <span class="tel-key">query_type</span>
+          <span class="${qtCls}">${qt}</span>
+        </div>
+        <div class="tel-row">
+          <span class="tel-key">cache</span>
+          <span class="${ctCls}">${ct}</span>
+        </div>
+        <div class="tel-row">
+          <span class="tel-key">latency</span>
+          <span class="tel-val latency">${latMs}</span>
+        </div>
+      </div>
+      ${traceHtml ? `<div class="tel-trace">${traceHtml}</div>` : ''}`;
+
+    body.appendChild(card);
+  });
+}
+
+// ================================================================
+// File ingestion
+// ================================================================
+function setupFileIngest() {
+  const zone  = document.getElementById('ingest-zone');
+  const input = document.getElementById('file-input');
+
+  zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    [...e.dataTransfer.files].forEach(queueFile);
+  });
+
+  input.addEventListener('change', () => {
+    [...input.files].forEach(queueFile);
+    input.value = '';
+  });
+}
+
+function queueFile(file) {
+  const section = document.getElementById('queue-section');
+  const queue   = document.getElementById('ingest-queue');
+  section.style.display = 'block';
+
+  const id  = 'ingest-' + Date.now();
+  const item = document.createElement('div');
+  item.className = 'ingest-item';
+  item.id = id;
+  item.innerHTML = `
+    <span class="ingest-item-name" title="${escHtml(file.name)}">${escHtml(file.name)}</span>
+    <span class="ingest-item-status queued" id="${id}-status">queued</span>`;
+  queue.appendChild(item);
+
+  // Read file content and send to ingest endpoint
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const content = e.target.result;
+
+    // Write to a temp file path the backend can read.
+    // In production (Docker) the file must physically exist at the path.
+    // We POST with a filepath that matches the volume mount.
+    // Since we can't write files from browser JS, we instead POST the
+    // raw content to a /ingest-text helper if available, otherwise
+    // inform the user to manually place the file.
+    const statusEl = document.getElementById(`${id}-status`);
+    try {
+      const r = await fetch(`${API}/ingest-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          content:  content,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      statusEl.textContent = 'done';
+      statusEl.className   = 'ingest-item-status done';
+      toast(`${file.name} ingested`, 'success');
+    } catch (err) {
+      // Fallback: file must be placed manually in data/raw/
+      statusEl.textContent = 'manual';
+      statusEl.className   = 'ingest-item-status error';
+      toast(
+        `Place ${file.name} in data/raw/ then call POST /ingest`,
+        'info'
+      );
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ================================================================
+// Utilities
+// ================================================================
+function usePrompt(el) {
+  const ta   = document.getElementById('query-input');
+  const text = el.querySelector('strong') ? el.textContent.replace(el.querySelector('strong').textContent, '').trim() : el.textContent.trim();
+  ta.value   = text;
+  ta.dispatchEvent(new Event('input'));
+  ta.focus();
+}
+
+function formatTime(d) {
+  if (!d) return '';
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+</script>
+</body>
+</html>

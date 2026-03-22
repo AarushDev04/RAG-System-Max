@@ -1,0 +1,35 @@
+# ============================================================
+# RAG System — Environment Configuration
+# Place this file in the project root (same folder as docker-compose.yml)
+# NEVER commit this file to git — it contains your secret token
+# ============================================================
+
+# ── HuggingFace (your only required credential) ─────────────
+# Get your free token at: https://huggingface.co/settings/tokens
+# Replace the value below with your actual token (starts with hf_)
+HF_API_TOKEN=hf_paste_your_token_here
+
+# ── HuggingFace model names ─────────────────────────────────
+# Do not change these unless you want to swap to a different model
+HF_EMBEDDING_MODEL=BAAI/bge-large-en-v1.5
+HF_CHATQA_MODEL=meta-llama/Llama-3.1-8B-Instruct
+HF_CLARA_MODEL=meta-llama/Llama-3.1-8B-Instruct
+HF_INFERENCE_BASE_URL=https://router.huggingface.co/hf-inference/models
+HF_CHAT_BASE_URL=https://router.huggingface.co/v1
+
+
+# ── Cache settings ───────────────────────────────────────────
+# How long exact cache entries live (seconds). 3600 = 1 hour
+CACHE_TTL_SECONDS=3600
+
+# Cosine similarity threshold for semantic cache hit (0.0 - 1.0)
+# 0.92 means queries must be 92% semantically similar to reuse a cached answer
+SEMANTIC_CACHE_THRESHOLD=0.92
+
+# ── Compression settings ─────────────────────────────────────
+# Minimum word count before CLaRa compression is applied
+# Contexts shorter than this skip compression (not worth the latency)
+COMPRESSION_MIN_WORDS=200
+
+# ── Context window ───────────────────────────────────────────
+MAX_CONTEXT_TOKENS=4096

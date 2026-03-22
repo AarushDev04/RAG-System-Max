@@ -1,0 +1,24 @@
+# ── Web framework ──────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# ── HTTP client (HuggingFace embed + ChatQA inference calls) ───
+httpx==0.27.0
+
+# ── Data validation ────────────────────────────────────────────
+pydantic==2.7.4
+
+# ── Vector DB client (Qdrant — dense + CLaRa collections) ─────
+qdrant-client==1.9.1
+
+# ── Full-text / BM25 (Elasticsearch) ──────────────────────────
+elasticsearch[async]==8.13.0
+
+# ── Graph DB (Neo4j — GraphRAG retriever) ──────────────────────
+neo4j==5.20.0
+
+# ── HuggingFace cold-start retry logic ─────────────────────────
+tenacity==8.3.0
+
+# ── Environment ────────────────────────────────────────────────
+python-dotenv==1.0.1
