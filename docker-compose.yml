@@ -1,0 +1,332 @@
+# ============================================================
+# Modern RAG System — Full Local Stack
+# Zero cloud cost: all inference via HuggingFace Serverless API
+#
+# Architecture layers:
+#   Layer 1  : qdrant, elasticsearch, neo4j, postgres, redis
+#   Layer 2-4: ingestion, retrieval, compression, orchestrator
+#   Layer 5  : prometheus, grafana
+#
+# Usage:
+#   cp .env.example .env          # set HF_API_TOKEN
+#   docker compose up --build     # first run (pulls + builds)
+#   docker compose up             # subsequent runs
+#   docker compose down -v        # full reset (deletes volumes)
+# ============================================================
+
+networks:
+  rag_net:
+    driver: bridge
+
+volumes:
+  qdrant_data:
+  neo4j_data:
+  neo4j_logs:
+  elastic_data:
+  postgres_data:
+  redis_data:
+
+services:
+
+  # ============================================================
+  # LAYER 1: DATA STORAGE
+  # ============================================================
+
+  # Vector DB — replaces Amazon OpenSearch Serverless (vector engine)
+  # UI: http://localhost:6333/dashboard
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: rag_qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Full-text / BM25 — replaces Amazon OpenSearch Service (BM25)
+  # API: http://localhost:9200
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: rag_elasticsearch
+    restart: unless-stopped
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qv '\"status\":\"red\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  # Graph DB — replaces Amazon Neptune
+  # Browser UI: http://localhost:7474  (neo4j / ragpassword)
+  neo4j:
+    image: neo4j:5.19-community
+    container_name: rag_neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/ragpassword
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_initial__size: 256m
+      NEO4J_dbms_memory_heap_max__size: 512m
+      NEO4J_dbms_memory_pagecache_size: 256m
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # Metadata store — replaces Amazon RDS for PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB:       rag_metadata
+      POSTGRES_USER:     raguser
+      POSTGRES_PASSWORD: ragpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d rag_metadata"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Cache — replaces Amazon ElastiCache for Redis
+  redis:
+    image: redis:7.2-alpine
+    container_name: rag_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # ============================================================
+  # LAYER 2-4: APPLICATION SERVICES
+  # All built from ./services/ context so Dockerfiles can share
+  # orchestrator/hf_client.py without cross-context COPY paths.
+  # ============================================================
+
+  # Step 1-6 ingestion pipeline
+  # POST http://localhost:8001/ingest
+  ingestion:
+    build:
+      context: ./services
+      dockerfile: ingestion/Dockerfile
+    container_name: rag_ingestion
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      HF_API_TOKEN:          ${HF_API_TOKEN}
+      HF_EMBEDDING_MODEL:    ${HF_EMBEDDING_MODEL:-BAAI/bge-large-en-v1.5}
+      HF_CHATQA_MODEL:       ${HF_CHATQA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_CLARA_MODEL:        ${HF_CLARA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_INFERENCE_BASE_URL: ${HF_INFERENCE_BASE_URL:-https://router.huggingface.co/hf-inference/models}
+      HF_CHAT_BASE_URL:      ${HF_CHAT_BASE_URL:-https://router.huggingface.co/v1}
+      QDRANT_HOST:           qdrant
+      ELASTIC_HOST:          elasticsearch
+      NEO4J_URI:             bolt://neo4j:7687
+      NEO4J_USER:            neo4j
+      NEO4J_PASSWORD:        ragpassword
+      POSTGRES_DSN:          postgresql://raguser:ragpassword@postgres:5432/rag_metadata
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - rag_net
+    volumes:
+      - ./data/raw:/app/data/raw
+
+  # 7-retriever retrieval service with RRF reranking
+  # POST http://localhost:8002/retrieve
+  # POST http://localhost:8002/classify
+  retrieval:
+    build:
+      context: ./services
+      dockerfile: retrieval/Dockerfile
+    container_name: rag_retrieval
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      HF_API_TOKEN:          ${HF_API_TOKEN}
+      HF_EMBEDDING_MODEL:    ${HF_EMBEDDING_MODEL:-BAAI/bge-large-en-v1.5}
+      HF_CHATQA_MODEL:       ${HF_CHATQA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_CLARA_MODEL:        ${HF_CLARA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_INFERENCE_BASE_URL: ${HF_INFERENCE_BASE_URL:-https://router.huggingface.co/hf-inference/models}
+      HF_CHAT_BASE_URL:      ${HF_CHAT_BASE_URL:-https://router.huggingface.co/v1}
+      QDRANT_HOST:           qdrant
+      ELASTIC_HOST:          elasticsearch
+      NEO4J_URI:             bolt://neo4j:7687
+      NEO4J_USER:            neo4j
+      NEO4J_PASSWORD:        ragpassword
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    networks:
+      - rag_net
+
+  # Context compression service
+  # POST http://localhost:8003/compress
+  compression:
+    build:
+      context: ./services
+      dockerfile: compression/Dockerfile
+    container_name: rag_compression
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      HF_API_TOKEN:          ${HF_API_TOKEN}
+      HF_CLARA_MODEL:        ${HF_CLARA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_INFERENCE_BASE_URL: ${HF_INFERENCE_BASE_URL:-https://router.huggingface.co/hf-inference/models}
+      HF_CHAT_BASE_URL:      ${HF_CHAT_BASE_URL:-https://router.huggingface.co/v1}
+      COMPRESSION_MIN_WORDS: ${COMPRESSION_MIN_WORDS:-200}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - rag_net
+
+  # Main LangGraph orchestrator — entry point for all queries
+  # POST http://localhost:8000/query
+  # POST http://localhost:8000/ingest
+  # GET  http://localhost:8000/health
+  # GET  http://localhost:8000/docs    (Swagger UI)
+  # GET  http://localhost:8000         (Chat UI)
+  orchestrator:
+    build:
+      context: ./services
+      dockerfile: orchestrator/Dockerfile
+    container_name: rag_orchestrator
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      HF_API_TOKEN:            ${HF_API_TOKEN}
+      HF_EMBEDDING_MODEL:      ${HF_EMBEDDING_MODEL:-BAAI/bge-large-en-v1.5}
+      HF_CHATQA_MODEL:         ${HF_CHATQA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_CLARA_MODEL:          ${HF_CLARA_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      HF_INFERENCE_BASE_URL:   ${HF_INFERENCE_BASE_URL:-https://router.huggingface.co/hf-inference/models}
+      HF_CHAT_BASE_URL:        ${HF_CHAT_BASE_URL:-https://router.huggingface.co/v1}
+      RETRIEVAL_SERVICE_URL:   http://retrieval:8002
+      COMPRESSION_SERVICE_URL: http://compression:8003
+      INGESTION_SERVICE_URL:   http://ingestion:8001
+      REDIS_URL:               redis://redis:6379/2
+      POSTGRES_DSN:            postgresql://raguser:ragpassword@postgres:5432/rag_metadata
+      CACHE_TTL_SECONDS:       ${CACHE_TTL_SECONDS:-3600}
+      SEMANTIC_CACHE_THRESHOLD: ${SEMANTIC_CACHE_THRESHOLD:-0.92}
+      COMPRESSION_MIN_WORDS:   ${COMPRESSION_MIN_WORDS:-200}
+      MAX_CONTEXT_TOKENS:      ${MAX_CONTEXT_TOKENS:-4096}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      retrieval:
+        condition: service_started
+      compression:
+        condition: service_started
+      ingestion:
+        condition: service_started
+    networks:
+      - rag_net
+
+  # ============================================================
+  # LAYER 5: MONITORING
+  # Replaces: CloudWatch + X-Ray
+  # ============================================================
+
+  # Scrapes /metrics from all four app services every 15s
+  # UI: http://localhost:9090
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: rag_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - rag_net
+    depends_on:
+      - orchestrator
+
+  # Dashboards on top of Prometheus
+  # UI: http://localhost:3000  (admin / admin)
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: rag_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    networks:
+      - rag_net
+    depends_on:
+      - prometheus
